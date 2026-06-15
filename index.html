@@ -126,13 +126,8 @@
       width: 32px;
       height: 32px;
       border-radius: 8px;
-      background: linear-gradient(135deg, var(--accent), #1D4ED8);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 14px;
-      font-weight: 800;
-      color: white;
+      object-fit: contain;
+      background: white;
       box-shadow: 0 2px 8px rgba(37, 99, 235, 0.4);
     }
 
@@ -350,16 +345,11 @@
       width: 80px;
       height: 80px;
       border-radius: 20px;
-      background: linear-gradient(135deg, var(--accent), #1D4ED8);
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      display: block;
       margin: 0 auto 28px;
+      object-fit: contain;
+      background: white;
       box-shadow: 0 8px 24px rgba(37, 99, 235, 0.3);
-      font-size: 32px;
-      font-weight: 900;
-      color: white;
-      letter-spacing: -1px;
     }
 
     .home-eyebrow {
@@ -1195,8 +1185,8 @@
   <!-- ── NAVIGATION ──────────────────────────────────────────── -->
   <nav>
     <a class="nav-brand" href="#" onclick="navigate('home');return false;">
-      <div class="nav-logo-mark">H3</div>
-      <span>Hope3</span>
+      <img src="hope3_400.png" alt="ProjectPulse Logo" class="nav-logo-mark">
+      <span>ProjectPulse</span>
     </a>
 
     <div class="nav-links">
@@ -1250,7 +1240,7 @@
     <div class="home-bg-orb orb2"></div>
 
     <div class="home-card">
-      <div class="logo-placeholder">H3</div>
+      <img src="hope3_400.png" alt="ProjectPulse Logo" class="logo-placeholder">
       <p class="home-eyebrow">Business Management Platform</p>
       <h1 class="home-title">Welcome to<br>Hope3</h1>
       <p class="home-subtitle">Manage your projects, track progress,<br>and collaborate with your team.</p>
