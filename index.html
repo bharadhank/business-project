@@ -1524,7 +1524,11 @@
     /* ── BOOT ──────────────────────────────────────────────────── */
     (function init() {
       applyTheme();
-      if (username) document.getElementById('username-input').value = username;
+      if (username) {
+        document.getElementById('username-input').value = username;
+        document.getElementById('f-owner').value = username;
+        document.getElementById('f-leader').value = username;
+      }
       updateFinancials();
       document.getElementById('f-value').addEventListener('input', updateFinancials);
       document.getElementById('f-collected').addEventListener('input', updateFinancials);
@@ -1553,6 +1557,17 @@
       if (navEl) navEl.classList.add('active');
 
       currentPage = page;
+      if (page === 'form') {
+        const inpVal = document.getElementById('username-input').value.trim();
+        if (inpVal) {
+          username = inpVal;
+          localStorage.setItem('pp_username', username);
+        }
+        if (username) {
+          document.getElementById('f-owner').value = username;
+          document.getElementById('f-leader').value = username;
+        }
+      }
       if (page === 'table') renderTable();
       window.scrollTo(0, 0);
     }
@@ -1581,6 +1596,8 @@
 
       username = val;
       localStorage.setItem('pp_username', username);
+      document.getElementById('f-owner').value = username;
+      document.getElementById('f-leader').value = username;
       navigate('form');
       toast('Welcome, ' + username + '! Fill in your first project below.', 'success');
     }
@@ -1662,6 +1679,10 @@
       ['f-crew', 'f-collected', 'f-outstanding'].forEach(id => {
         document.getElementById(id).value = '';
       });
+      if (username) {
+        document.getElementById('f-owner').value = username;
+        document.getElementById('f-leader').value = username;
+      }
     }
 
     /* ── PAGE 3 — TABLE ────────────────────────────────────────── */
