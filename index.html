@@ -1506,8 +1506,28 @@
   <!-- Toast Container -->
   <div class="toast-container" id="toasts"></div>
 
+  <!-- Firebase Compat CDN (works without modules, onclick handlers work) -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+  <!-- Load environment (if present) so we can override build-time values -->
+  <script src="env.js"></script>
+
   <!-- ══ JAVASCRIPT ══════════════════════════════════════════════ -->
   <script>
+    /* ── FIREBASE INIT ─────────────────────────────────────────── */
+    const firebaseConfig = (window.__ENV && window.__ENV.firebaseConfig) || {
+      apiKey: "AIzaSyBOZfHLuNGciLYgbWCsYVZJkAz_IyG8zck",
+      authDomain: "business-management-fc675.firebaseapp.com",
+      projectId: "business-management-fc675",
+      storageBucket: "business-management-fc675.firebasestorage.app",
+      messagingSenderId: "638879468377",
+      appId: "1:638879468377:web:8c4cc8408fff60a0fc9a48",
+      measurementId: "G-J6XZ443QVW"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
     /* ── STATE ─────────────────────────────────────────────────── */
     let currentPage = 'home';
     let projects = JSON.parse(localStorage.getItem('pp_projects') || '[]');
@@ -1520,6 +1540,40 @@
     let tablePage = 1;
     const ROWS_PER_PAGE = 8;
     let editId = null;
+    let firestoreOK = false;
+
+    /* ── FIRESTORE HELPERS ──────────────────────────────────────── */
+    function saveLocal() {
+      localStorage.setItem('pp_projects', JSON.stringify(projects));
+    }
+
+    async function saveToFirestore(project) {
+      try {
+        const ref = await db.collection('projects').add({ ...project, createdAt: Date.now() });
+        // Store firestoreId back into local projects array
+        const idx = projects.findIndex(p => p.id === project.id);
+        if (idx !== -1) { projects[idx].firestoreId = ref.id; saveLocal(); }
+      } catch (e) {
+        if (e.code === 'permission-denied') showRulesError();
+        else console.error('Firestore write error:', e.message);
+      }
+    }
+
+    async function deleteFromFirestore(firestoreId) {
+      if (!firestoreId) return;
+      try { await db.collection('projects').doc(firestoreId).delete(); }
+      catch (e) { if (e.code === 'permission-denied') showRulesError(); }
+    }
+
+    async function updateInFirestore(firestoreId, updates) {
+      if (!firestoreId) return;
+      try { await db.collection('projects').doc(firestoreId).update(updates); }
+      catch (e) { if (e.code === 'permission-denied') showRulesError(); }
+    }
+
+    function showRulesError() {
+      toast('❌ Firestore blocked! Go to Firebase Console → Firestore → Rules → set allow read, write: if true → Publish', 'error');
+    }
 
     /* ── BOOT ──────────────────────────────────────────────────── */
     (function init() {
@@ -1532,6 +1586,28 @@
       updateFinancials();
       document.getElementById('f-value').addEventListener('input', updateFinancials);
       document.getElementById('f-collected').addEventListener('input', updateFinancials);
+
+      // Connect to Firestore real-time listener
+      db.collection('projects').orderBy('createdAt', 'desc').onSnapshot((snapshot) => {
+        if (!firestoreOK) {
+          firestoreOK = true;
+          toast('🔥 Connected to Firestore!', 'success');
+        }
+        const fsProjects = snapshot.docs.map(d => ({ firestoreId: d.id, ...d.data() }));
+        if (fsProjects.length > 0 || firestoreOK) {
+          projects = fsProjects.length > 0 ? fsProjects : projects;
+          saveLocal();
+          filteredProjects = [...projects];
+          applySort();
+          if (currentPage === 'table') renderTable();
+        }
+      }, (err) => {
+        if (err.code === 'permission-denied') {
+          showRulesError();
+        } else {
+          console.warn('Firestore listener error:', err.message);
+        }
+      });
     })();
 
     /* ── THEME ─────────────────────────────────────────────────── */
@@ -1625,7 +1701,7 @@
       { id: 'f-value', err: 'err-value', key: 'value' },
     ];
 
-    function handleFormSubmit() {
+    async function handleFormSubmit() {
       let valid = true;
       REQUIRED_FIELDS.forEach(f => {
         const el = document.getElementById(f.id);
@@ -1643,10 +1719,11 @@
 
       const val = parseFloat(document.getElementById('f-value').value) || 0;
       const col = parseFloat(document.getElementById('f-collected').value) || 0;
+      const projectName = document.getElementById('f-project-name').value.trim();
 
       const project = {
         id: Date.now(),
-        projectName: document.getElementById('f-project-name').value.trim(),
+        projectName,
         projectType: document.getElementById('f-project-type').value.trim(),
         owner: document.getElementById('f-owner').value.trim(),
         leader: document.getElementById('f-leader').value.trim(),
@@ -1659,13 +1736,17 @@
         outstanding: Math.max(0, val - col),
       };
 
+      // Save to localStorage immediately
       projects.unshift(project);
-      localStorage.setItem('pp_projects', JSON.stringify(projects));
       filteredProjects = [...projects];
+      saveLocal();
+
+      // Try Firestore silently in background
+      saveToFirestore(project);
 
       resetForm();
       navigate('table');
-      toast('Project "' + project.projectName + '" saved successfully!', 'success');
+      toast('Project "' + projectName + '" saved!', 'success');
     }
 
     function resetForm() {
@@ -1809,25 +1890,28 @@
       });
     }
 
-    function deleteProject(id) {
+    async function deleteProject(id) {
       if (!confirm('Delete this project? This cannot be undone.')) return;
-      projects = projects.filter(p => p.id !== id);
-      localStorage.setItem('pp_projects', JSON.stringify(projects));
-      filteredProjects = filteredProjects.filter(p => p.id !== id);
+      const p = projects.find(x => x.id === id || x.firestoreId === id);
+      projects = projects.filter(x => x.id !== id && x.firestoreId !== id);
+      filteredProjects = filteredProjects.filter(x => x.id !== id && x.firestoreId !== id);
+      saveLocal();
       renderTable();
       toast('Project deleted.', 'info');
+      // Try Firestore delete silently
+      if (p && p.firestoreId) deleteFromFirestore(p.firestoreId);
     }
 
     /* ── EDIT MODAL ────────────────────────────────────────────── */
     function openEdit(id) {
-      const p = projects.find(x => x.id === id);
+      const p = projects.find(x => x.id === id || x.firestoreId === id || String(x.id) === String(id));
       if (!p) return;
-      editId = id;
+      editId = p.id;
       document.getElementById('m-name').value = p.projectName;
       document.getElementById('m-type').value = p.projectType;
       document.getElementById('m-owner').value = p.owner;
       document.getElementById('m-leader').value = p.leader;
-      document.getElementById('m-crew').value = p.crew;
+      document.getElementById('m-crew').value = p.crew || '';
       document.getElementById('m-status').value = p.status;
       document.getElementById('m-start').value = p.startDate;
       document.getElementById('m-end').value = p.endDate;
@@ -1851,15 +1935,13 @@
       if (e.key === 'Escape') closeModal();
     });
 
-    function saveEdit() {
-      const idx = projects.findIndex(p => p.id === editId);
-      if (idx === -1) return;
+    async function saveEdit() {
+      if (editId === null) return;
 
       const val = parseFloat(document.getElementById('m-value').value) || 0;
       const col = parseFloat(document.getElementById('m-collected').value) || 0;
 
-      projects[idx] = {
-        ...projects[idx],
+      const updates = {
         projectName: document.getElementById('m-name').value.trim(),
         projectType: document.getElementById('m-type').value.trim(),
         owner: document.getElementById('m-owner').value.trim(),
@@ -1873,9 +1955,17 @@
         outstanding: Math.max(0, val - col),
       };
 
-      localStorage.setItem('pp_projects', JSON.stringify(projects));
-      filteredProjects = [...projects];
-      handleSearch(); // Re-apply search filter
+      const idx = projects.findIndex(p => p.id === editId);
+      if (idx !== -1) {
+        const firestoreId = projects[idx].firestoreId;
+        projects[idx] = { ...projects[idx], ...updates };
+        saveLocal();
+        filteredProjects = [...projects];
+        handleSearch();
+        // Try Firestore update silently
+        if (firestoreId) updateInFirestore(firestoreId, updates);
+      }
+
       closeModal();
       toast('Project updated successfully!', 'success');
     }
